@@ -1,0 +1,25 @@
+[package]
+name = "sudoku"
+version = "0.1.0"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+anyhow = "1.0.79"
+
+[dev-dependencies]
+criterion = "0.5.1"
+proptest = "1.4.0"
+test-case = "3.3.1"
+test-strategy = "0.3.1"
+
+[lib]
+name = "sudoku"
+
+[[bin]]
+name = "cl_solver"
+
+[[bench]]
+name = "escragot"
+harness = false
