@@ -368,12 +368,18 @@ impl PositionSet {
 struct SolutionInProgress {
     board: Board,
     bit_sets: BoardBitSets,
+    to_check: PositionSet,
 }
 
 impl SolutionInProgress {
     pub fn new(board: Board) -> anyhow::Result<Self> {
         let bit_sets = board.to_bit_sets()?;
-        Ok(SolutionInProgress { board, bit_sets })
+        let to_check = PositionSet::new(&board);
+        Ok(SolutionInProgress {
+            board,
+            bit_sets,
+            to_check,
+        })
     }
 
     pub fn into_board(self) -> Board {
@@ -382,13 +388,11 @@ impl SolutionInProgress {
 
     pub fn solve_simple(&mut self) -> SimpleSolveResult {
         // TODO: Pass the position set from outside too
-        let mut to_check = PositionSet::new(&self.board);
-
         let mut backtrack_coord = (0, 0);
         let mut backtrack_options = 0;
         let mut backtrack_option_count = 10;
 
-        while let Some((x, y)) = to_check.pop() {
+        while let Some((x, y)) = self.to_check.pop() {
             debug_assert!(self.board[(x, y)].is_none());
 
             let available = self.bit_sets.get_available(x, y);
@@ -408,7 +412,6 @@ impl SolutionInProgress {
                 let v: NonZeroU8 = (v as u8).try_into().unwrap();
 
                 self.set_value(x, y, v);
-                to_check.add_affected(x, y, &self.board);
             }
         }
 
@@ -427,6 +430,7 @@ impl SolutionInProgress {
         assert!(self.board[(x, y)].is_none());
         self.board[(x, y)] = Some(v);
         self.bit_sets.set_value(x, y, v);
+        self.to_check.add_affected(x, y, &self.board);
     }
 }
 
