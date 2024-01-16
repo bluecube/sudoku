@@ -71,28 +71,24 @@ impl Board {
         let mut result = Vec::new();
 
         while let Some(mut sol) = stack.pop() {
-            match sol.solve_simple() {
-                SimpleSolveResult::Solved => {
-                    result.push(sol.into_board());
-                }
-                SimpleSolveResult::NotSimple {
-                    backtrack_coord,
-                    mut backtrack_options,
-                } => {
-                    let (x, y) = backtrack_coord;
-                    while backtrack_options != 0 {
-                        let tz = backtrack_options.trailing_zeros();
-                        backtrack_options &= !(1u16 << tz);
-                        let v: NonZeroU8 = (tz as u8 + 1).try_into().unwrap();
+            if !sol.solve_simple() {
+                // No solution -- just stop this branch completely
+                continue;
+            }
+            if let Some((x, y)) = sol.empty_fields.pop() {
+                let mut available = sol.bit_sets.get_available(x, y);
+                while available != 0 {
+                    let tz = available.trailing_zeros();
+                    available &= !(1u16 << tz);
+                    let v: NonZeroU8 = (tz as u8 + 1).try_into().unwrap();
 
-                        let mut cloned_sol = sol.clone();
-                        cloned_sol.set_value(x, y, v);
-                        stack.push(cloned_sol);
-                    }
+                    let mut cloned_sol = sol.clone();
+                    cloned_sol.set_value(x, y, v);
+                    stack.push(cloned_sol);
                 }
-                SimpleSolveResult::NoSolution => {
-                    // Just stop this branch completely
-                }
+            } else {
+                // There are no more empty fields, the board is solved
+                result.push(sol.into_board())
             }
         }
 
@@ -382,27 +378,20 @@ impl SolutionInProgress {
         self.board
     }
 
-    pub fn solve_simple(&mut self) -> SimpleSolveResult {
-        // TODO: Pass the position set from outside too
-        let mut backtrack_coord = (0, 0);
-        let mut backtrack_options = 0;
-        let mut backtrack_option_count = 10;
-
+    /// Attempt to solve the sudoku in place using a very simple
+    /// constraint based solver.
+    /// Only dealing with single values.
+    /// Returns false iff there is a contradiction in the board.
+    pub fn solve_simple(&mut self) -> bool {
         while let Some((x, y)) = self.to_check.pop() {
             debug_assert!(self.board[(x, y)].is_none());
 
             let available = self.bit_sets.get_available(x, y);
             let available_count = available.count_ones();
             if available_count == 0 {
-                return SimpleSolveResult::NoSolution;
+                return false;
             }
-            if available_count != 1 {
-                if available_count <= backtrack_option_count {
-                    backtrack_coord = (x, y);
-                    backtrack_options = available;
-                    backtrack_option_count = available_count;
-                }
-            } else {
+            if available_count == 1 {
                 let v = available.trailing_zeros() + 1;
                 assert!(v <= 9);
                 let v: NonZeroU8 = (v as u8).try_into().unwrap();
@@ -411,14 +400,7 @@ impl SolutionInProgress {
             }
         }
 
-        if self.empty_fields.is_empty() {
-            SimpleSolveResult::Solved
-        } else {
-            SimpleSolveResult::NotSimple {
-                backtrack_coord,
-                backtrack_options,
-            }
-        }
+        true
     }
 
     fn set_value(&mut self, x: usize, y: usize, v: NonZeroU8) {
@@ -428,15 +410,6 @@ impl SolutionInProgress {
         self.to_check.add_affected(x, y, &self.board);
         self.empty_fields.remove(x, y);
     }
-}
-
-enum SimpleSolveResult {
-    Solved,
-    NotSimple {
-        backtrack_coord: (usize, usize),
-        backtrack_options: u16,
-    },
-    NoSolution,
 }
 
 pub fn solve_and_print(board: Board) {
