@@ -179,7 +179,7 @@ impl Display for Board {
             }
             writeln!(f, "")?;
             if y == 2 || y == 5 {
-                writeln!(f, "-----------")?;
+                writeln!(f, "---+---+---")?;
             }
         }
         Ok(())
