@@ -76,22 +76,19 @@ impl Board {
                     result.push(sol.into_board());
                 }
                 SimpleSolveResult::NotSimple {
-                    backtrack_coord: backtrack_candidate_coord,
-                    backtrack_options: mut backtrack_candidate_available,
-                    backtrack_option_count: backtrack_candidate_available_count,
+                    backtrack_coord,
+                    mut backtrack_options,
                 } => {
-                    let (x, y) = backtrack_candidate_coord;
-                    for _ in 0..backtrack_candidate_available_count {
-                        let tz = backtrack_candidate_available.trailing_zeros();
-                        backtrack_candidate_available &= !(1u16 << tz);
+                    let (x, y) = backtrack_coord;
+                    while backtrack_options != 0 {
+                        let tz = backtrack_options.trailing_zeros();
+                        backtrack_options &= !(1u16 << tz);
                         let v: NonZeroU8 = (tz as u8 + 1).try_into().unwrap();
 
                         let mut cloned_sol = sol.clone();
                         cloned_sol.set_value(x, y, v);
                         stack.push(cloned_sol);
                     }
-
-                    assert_eq!(backtrack_candidate_available, 0);
                 }
                 SimpleSolveResult::NoSolution => {
                     // Just stop this branch completely
@@ -419,7 +416,6 @@ impl SolutionInProgress {
         } else {
             SimpleSolveResult::NotSimple {
                 backtrack_coord,
-                backtrack_option_count,
                 backtrack_options,
             }
         }
@@ -439,7 +435,6 @@ enum SimpleSolveResult {
     NotSimple {
         backtrack_coord: (usize, usize),
         backtrack_options: u16,
-        backtrack_option_count: u32,
     },
     NoSolution,
 }
