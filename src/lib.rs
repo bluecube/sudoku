@@ -1,7 +1,7 @@
 use std::collections::BTreeMap;
 use std::fmt::Display;
 use std::num::NonZeroU8;
-use std::ops::{Index, IndexMut};
+use std::ops::{BitAnd, Index, IndexMut};
 
 use anyhow::bail;
 
@@ -77,11 +77,7 @@ impl Board {
             }
             if let Some((x, y)) = sol.empty_fields.pop() {
                 let mut available = sol.bit_sets.get_available(x, y);
-                while available != 0 {
-                    let tz = available.trailing_zeros();
-                    available &= !(1u16 << tz);
-                    let v: NonZeroU8 = (tz as u8 + 1).try_into().unwrap();
-
+                while let Some(v) = available.pop() {
                     let mut cloned_sol = sol.clone();
                     cloned_sol.set_value(x, y, v);
                     stack.push(cloned_sol);
@@ -188,58 +184,56 @@ impl Display for Board {
 
 #[derive(Clone, Debug)]
 struct BoardBitSets {
-    row: [u16; 9],
-    col: [u16; 9],
-    block: [u16; 9],
+    row: [ValueSet; 9],
+    col: [ValueSet; 9],
+    block: [ValueSet; 9],
 }
 
 impl BoardBitSets {
     fn new() -> Self {
         BoardBitSets {
-            row: [(1u16 << 9) - 1; 9],
-            col: [(1u16 << 9) - 1; 9],
-            block: [(1u16 << 9) - 1; 9],
+            row: [ValueSet::new(); 9],
+            col: [ValueSet::new(); 9],
+            block: [ValueSet::new(); 9],
         }
     }
 
     /// Return set of values that are unavailable for given grid position
-    fn get_available(&self, x: usize, y: usize) -> u16 {
+    fn get_available(&self, x: usize, y: usize) -> ValueSet {
         let block_index = Self::get_block_index(x, y);
         self.row[y] & self.col[x] & self.block[block_index]
     }
 
     fn try_set_value(&mut self, x: usize, y: usize, value: NonZeroU8) -> anyhow::Result<()> {
-        let bit = 1u16 << (value.get() - 1);
         let block_index = Self::get_block_index(x, y);
 
-        if self.row[y] & bit == 0 {
+        if !self.row[y].contains(value) {
             bail!("Cannot place value {value} at {x}, {y} -- row conflict")
         } else {
-            self.row[y] &= !bit;
+            self.row[y].remove(value);
         }
 
-        if self.col[x] & bit == 0 {
+        if !self.col[x].contains(value) {
             bail!("Cannot place value {value} at {x}, {y} -- column conflict")
         } else {
-            self.col[x] &= !bit;
+            self.col[x].remove(value);
         }
 
-        if self.block[block_index] & bit == 0 {
+        if !self.block[block_index].contains(value) {
             bail!("Cannot place value {value} at {x}, {y} -- column conflict")
         } else {
-            self.block[block_index] &= !bit;
+            self.block[block_index].remove(value);
         }
 
         Ok(())
     }
 
     fn set_value(&mut self, x: usize, y: usize, value: NonZeroU8) {
-        let bit = 1u16 << (value.get() - 1);
         let block_index = Self::get_block_index(x, y);
 
-        self.row[y] &= !bit;
-        self.col[x] &= !bit;
-        self.block[block_index] &= !bit;
+        self.row[y].remove(value);
+        self.col[x].remove(value);
+        self.block[block_index].remove(value);
     }
 
     fn get_block_index(x: usize, y: usize) -> usize {
@@ -252,27 +246,86 @@ impl BoardBitSets {
     fn print(&self) {
         println!("Row options: ");
         self.row.iter().for_each(|bitset| {
-            Self::print_options(*bitset);
+            bitset.print();
             println!("")
         });
         println!("Col options: ");
         self.col.iter().for_each(|bitset| {
-            Self::print_options(*bitset);
+            bitset.print();
             println!("")
         });
         println!("Block options: ");
         self.block.iter().for_each(|bitset| {
-            Self::print_options(*bitset);
+            bitset.print();
             println!("")
         });
     }
+}
 
-    fn print_options(bitset: u16) {
-        let mut bitset = bitset;
-        while bitset != 0 {
-            let tz = bitset.trailing_zeros();
-            bitset &= !(1 << tz);
-            print!("{}, ", tz + 1);
+#[derive(Copy, Clone, Debug)]
+#[repr(transparent)]
+struct ValueSet {
+    bits: u16,
+}
+
+impl ValueSet {
+    fn new() -> Self {
+        Self {
+            bits: (1u16 << 9) - 1,
+        }
+    }
+
+    fn is_empty(&self) -> bool {
+        self.bits == 0
+    }
+
+    fn len(&self) -> usize {
+        self.bits.count_ones() as usize
+    }
+
+    fn pop(&mut self) -> Option<NonZeroU8> {
+        if self.is_empty() {
+            None
+        } else {
+            let tz = self.bits.trailing_zeros();
+            self.bits &= !(1 << tz);
+            Some((tz as u8 + 1).try_into().unwrap())
+        }
+    }
+
+    fn peek(&self) -> Option<NonZeroU8> {
+        if self.is_empty() {
+            None
+        } else {
+            let tz = self.bits.trailing_zeros();
+            Some((tz as u8 + 1).try_into().unwrap())
+        }
+    }
+
+    fn print(&self) {
+        let mut cloned = self.clone();
+        while let Some(v) = cloned.pop() {
+            print!(" {v},");
+        }
+        println!();
+    }
+
+    fn remove(&mut self, value: NonZeroU8) {
+        let index = value.get() - 1;
+        self.bits &= !(1 << index);
+    }
+
+    fn contains(&self, value: NonZeroU8) -> bool {
+        let index = value.get() - 1;
+        self.bits & (1 << index) != 0
+    }
+}
+
+impl BitAnd for ValueSet {
+    type Output = Self;
+    fn bitand(self, rhs: Self) -> Self::Output {
+        ValueSet {
+            bits: self.bits & rhs.bits,
         }
     }
 }
@@ -392,14 +445,10 @@ impl SolutionInProgress {
             debug_assert!(self.board[(x, y)].is_none());
 
             let available = self.bit_sets.get_available(x, y);
-            let available_count = available.count_ones();
-            if available_count == 0 {
+            if available.is_empty() {
                 return false;
-            }
-            if available_count == 1 {
-                let v = available.trailing_zeros() + 1;
-                assert!(v <= 9);
-                let v: NonZeroU8 = (v as u8).try_into().unwrap();
+            } else if available.len() == 1 {
+                let v = available.peek().unwrap();
 
                 self.set_value(x, y, v);
             }
