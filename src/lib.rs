@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::collections::BTreeMap;
 use std::fmt::Display;
 use std::num::NonZeroU8;
 use std::ops::{Index, IndexMut};
@@ -122,7 +122,7 @@ impl Board {
         v.map_or('.', |v| char::from_digit(v.get() as u32, 10).unwrap())
     }
 
-    pub fn example_boards() -> HashMap<&'static str, Board> {
+    pub fn example_boards() -> BTreeMap<&'static str, Board> {
         let data = [
             "easy",
             "3.5629..77.61.8   8 1   265  3  5 7 687      2  7  6  47958  2 1  43 5 9  89    6",
