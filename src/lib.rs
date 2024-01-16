@@ -66,7 +66,7 @@ impl Board {
             .all(Option::is_some)
     }
 
-    pub fn solve(&self) -> anyhow::Result<Vec<Board>> {
+    pub fn solve(&self, max_results: usize) -> anyhow::Result<Vec<Board>> {
         let mut stack = vec![SolutionInProgress::new(self.clone())?];
         let mut result = Vec::new();
 
@@ -88,7 +88,10 @@ impl Board {
                 }
             } else {
                 // There are no more empty fields, the board is solved
-                result.push(sol.into_board())
+                result.push(sol.into_board());
+                if result.len() >= max_results {
+                    break;
+                }
             }
         }
 
@@ -131,6 +134,8 @@ impl Board {
             "..2.6.3...5.8...4.1....7.69.7.....5...9.....23.....6...6..5.1....42.....8....3...",
             "escragot",
             "1....7.9..3..2...8..96..5....53..9...1..8...26....4...3......1..41.....7..7...3..",
+            "hard1",
+            ".....6....59.....82....8....45........3........6..3.54...325..6..................",
         ];
 
         data.chunks_exact(2)
@@ -416,8 +421,12 @@ pub fn solve_and_print(board: Board) {
     println!("{}", board);
     assert!(board.is_valid());
 
-    let solutions = board.solve().unwrap();
+    const MAX_SOLUTIONS: usize = 5;
+    let solutions = board.solve(MAX_SOLUTIONS).unwrap();
     println!("Found {} solutions:", solutions.len());
+    if solutions.len() == MAX_SOLUTIONS {
+        println!("Number of solutions was limited, there are possibly more.");
+    }
     for sol in solutions {
         println!("{}", sol);
         assert!(sol.is_valid());
@@ -429,7 +438,6 @@ pub fn solve_and_print(board: Board) {
 #[cfg(test)]
 mod test {
     use super::*;
-    use test_case::test_case;
     use test_strategy::proptest;
 
     #[proptest]
