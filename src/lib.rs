@@ -102,20 +102,21 @@ impl Board {
         Ok(result)
     }
 
-    fn to_bit_sets(&self) -> anyhow::Result<BoardBitSets> {
-        let mut result = BoardBitSets::new();
+    fn to_bit_sets(&self) -> anyhow::Result<(BoardBitSets, PositionSet)> {
+        let mut bit_sets = BoardBitSets::new();
+        let mut empty_fields = PositionSet::new_empty();
 
         for y in 0..9 {
             for x in 0..9 {
-                let Some(v) = self[(x, y)] else {
-                    continue;
+                if let Some(v) = self[(x, y)] {
+                    bit_sets.try_set_value(x, y, v)?;
+                } else {
+                    empty_fields.add(x, y);
                 };
-                result.missing_fields -= 1;
-                result.try_set_value(x, y, v)?;
             }
         }
 
-        Ok(result)
+        Ok((bit_sets, empty_fields))
     }
 
     /// Formats a single value to character.
@@ -192,11 +193,6 @@ struct BoardBitSets {
     row: [u16; 9],
     col: [u16; 9],
     block: [u16; 9],
-
-    /// Number of fields not filled in the board.
-    /// Strictly speaking this value doesn't belong here, but it turns out to be
-    /// always used with the "prope" bit sets and is easy to calculate together.
-    missing_fields: usize,
 }
 
 impl BoardBitSets {
@@ -205,7 +201,6 @@ impl BoardBitSets {
             row: [(1u16 << 9) - 1; 9],
             col: [(1u16 << 9) - 1; 9],
             block: [(1u16 << 9) - 1; 9],
-            missing_fields: 9 * 9,
         }
     }
 
@@ -247,7 +242,6 @@ impl BoardBitSets {
         self.row[y] &= !bit;
         self.col[x] &= !bit;
         self.block[block_index] &= !bit;
-        self.missing_fields -= 1;
     }
 
     fn get_block_index(x: usize, y: usize) -> usize {
@@ -273,8 +267,6 @@ impl BoardBitSets {
             Self::print_options(*bitset);
             println!("")
         });
-
-        println!("{} fields are missing", self.missing_fields);
     }
 
     fn print_options(bitset: u16) {
@@ -355,6 +347,10 @@ impl PositionSet {
         }
     }
 
+    fn is_empty(&self) -> bool {
+        self.bits == 0
+    }
+
     fn print_positions(&self) {
         let mut cloned = self.clone();
         while let Some((x, y)) = cloned.pop() {
@@ -368,17 +364,20 @@ impl PositionSet {
 struct SolutionInProgress {
     board: Board,
     bit_sets: BoardBitSets,
+    /// Set of all positions that might potentially have only one possible value
     to_check: PositionSet,
+    empty_fields: PositionSet,
 }
 
 impl SolutionInProgress {
     pub fn new(board: Board) -> anyhow::Result<Self> {
-        let bit_sets = board.to_bit_sets()?;
+        let (bit_sets, empty_fields) = board.to_bit_sets()?;
         let to_check = PositionSet::new(&board);
         Ok(SolutionInProgress {
             board,
             bit_sets,
             to_check,
+            empty_fields,
         })
     }
 
@@ -415,7 +414,7 @@ impl SolutionInProgress {
             }
         }
 
-        if self.bit_sets.missing_fields == 0 {
+        if self.empty_fields.is_empty() {
             SimpleSolveResult::Solved
         } else {
             SimpleSolveResult::NotSimple {
@@ -431,6 +430,7 @@ impl SolutionInProgress {
         self.board[(x, y)] = Some(v);
         self.bit_sets.set_value(x, y, v);
         self.to_check.add_affected(x, y, &self.board);
+        self.empty_fields.remove(x, y);
     }
 }
 
